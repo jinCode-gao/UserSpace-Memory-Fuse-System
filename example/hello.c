@@ -20,6 +20,7 @@
 
 
 #define FUSE_USE_VERSION 31
+#define MAX_NODES 5
 
 #include <fuse.h>
 #include <stdio.h>
@@ -43,6 +44,25 @@ static struct options {
 	int show_help;
 } options,options_list[5];
 
+static struct node {
+	const char *filename;//file or directory name
+	const char *contents;//file contents
+	int type; // 0 for file,1 for directory
+	struct stat st; // file or dir attribute
+    struct Node *parent; // parent node
+    struct Node **children; // children nodes
+    int child_count; // numbers of children nodes
+} ;
+
+struct node nodes[MAX_NODES];//list of node
+
+struct node CreateNode(const char *filename,int type,struct Node *parent){
+	struct node* new_node = (struct node *)malloc(sizeof(struct node));
+	new_node->filename=filename;
+	new_node->type=type;
+	new_node->parent=parent;
+}
+
 #define OPTION(t, p)                           \
     { t, offsetof(struct options, p), 1 }
 static const struct fuse_opt option_spec[] = {
@@ -52,6 +72,14 @@ static const struct fuse_opt option_spec[] = {
 	OPTION("--help", show_help),
 	FUSE_OPT_END
 };
+
+void* my_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
+{
+    fprintf(stderr, "my_init is called"); 
+	//create root node
+	CreateNode("/",1,NULL);
+    return NULL;
+}
 
 int my_mknod(const char *path, mode_t m)
 {
@@ -160,6 +188,7 @@ int my_setattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
 }
 
 static const struct fuse_operations hello_oper = {
+	.init=my_init,
 	.mknod=my_mknod,
 	.create=my_create,
 	.open=my_open,
