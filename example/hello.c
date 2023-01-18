@@ -415,7 +415,57 @@ int my_unlink(const char * path){
 		}
 	}
 
-	//
+	return 0;
+}
+int my_rmdir(const char * path){
+	//Find the node to be deleted
+	struct node* node_to_delete = FindNode(path);
+	if(node_to_delete == NULL)
+		return -ENOENT;
+	//Remove the node from parent's children list
+	struct node* parent = node_to_delete->parent;
+	int i = 0;
+	for(i = 0; i < parent->child_count; i++){
+		if(strcmp(parent->children[i]->path, path) == 0){
+			break;
+		}
+	}
+	for(int j = i; j < parent->child_count - 1; j++){
+		parent->children[j] = parent->children[j + 1];//subtree left shift
+	}
+	parent->child_count--;
+	//remove children node
+	char **child_names = (char **)malloc(MAX_CHILDREN * sizeof(char *));
+	FindChild(node_to_delete,child_names);
+	for(int i=0;i<node_to_delete->child_count;i++){
+		struct node* child=FindNode(child_names[i]);
+		if((child->mode & S_IFMT) == S_IFDIR){
+			my_rmdir(child->path);
+		}
+		else{
+			my_unlink(child->path);
+		}
+	}
+
+	//Free the memory allocated for the node
+	free(node_to_delete->path);
+	free(node_to_delete->filename);
+	if(node_to_delete->contents!=NULL)
+		free(node_to_delete->contents);
+	
+	//Remove the node from nodes
+	int j;
+	for (i = 0; i < file_num; i++) {
+		if (nodes[i] == node_to_delete) {
+			free(nodes[i]);
+			for (j = i; j < file_num - 1; j++) {
+				nodes[j] = nodes[j + 1];
+			}
+			file_num--;
+			break;
+		}
+	}
+
 	return 0;
 }
 
@@ -435,6 +485,7 @@ static const struct fuse_operations hello_oper = {
 	.readdir	= my_readdir,
 	.read=my_read,
 	.unlink=my_unlink,
+	.rmdir=my_rmdir,
 };
 
 static void show_help(const char *progname)
