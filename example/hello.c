@@ -93,6 +93,7 @@ struct node* CreateNode(const char *path,mode_t mode,struct Node *parent){
 	else
 		new_node->filename="";
 	new_node->path=strdup(path);
+	new_node->contents = NULL;
 	
 	new_node->mode=mode;
 
@@ -109,8 +110,10 @@ struct node* CreateNode(const char *path,mode_t mode,struct Node *parent){
 	//
 	nodes[file_num]=new_node;
 	file_num++;
-
-	new_node->children = (struct node **)malloc(MAX_CHILDREN * sizeof(struct node *));
+	if (S_ISDIR(mode))
+		new_node->children = (struct node **)malloc(MAX_CHILDREN * sizeof(struct node *));//file has no children
+	 else 
+    	new_node->children = NULL;
 
 	return new_node;
 }
@@ -341,6 +344,45 @@ int my_release(const char *path, struct fuse_file_info *fi) {
 	fprintf(stderr, "my_release path = %s\n", path); 
     return 0;
 }
+int my_unlink(const char * path){
+	//Find the node to be deleted
+	struct node* node_to_delete = FindNode(path);
+	if(node_to_delete == NULL)
+		return -ENOENT;
+	//Remove the node from parent's children list
+	struct node* parent = node_to_delete->parent;
+	int i = 0;
+	for(i = 0; i < parent->child_count; i++){
+		if(strcmp(parent->children[i]->path, path) == 0){
+			break;
+		}
+	}
+	for(int j = i; j < parent->child_count - 1; j++){
+		parent->children[j] = parent->children[j + 1];//subtree left shift
+	}
+	parent->child_count--;
+	//Free the memory allocated for the node
+	free(node_to_delete->path);
+	free(node_to_delete->filename);
+	if(node_to_delete->contents!=NULL)
+		free(node_to_delete->contents);
+	
+	//Remove the node from nodes
+	int j;
+	for (i = 0; i < file_num; i++) {
+		if (nodes[i] == node_to_delete) {
+			free(nodes[i]);
+			for (j = i; j < file_num - 1; j++) {
+				nodes[j] = nodes[j + 1];
+			}
+			file_num--;
+			break;
+		}
+	}
+	
+	//
+	return 0;
+}
 
 
 static const struct fuse_operations hello_oper = {
@@ -356,6 +398,7 @@ static const struct fuse_operations hello_oper = {
 	.utimens=my_utimens,
 	.readdir	= my_readdir,
 	.read=my_read,
+	.unlink=my_unlink,
 };
 
 static void show_help(const char *progname)
