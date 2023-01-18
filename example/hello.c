@@ -49,7 +49,7 @@ static struct node {
 	const char *filename;//file or directory name
 	const char *contents;//file contents
 	const char *path;
-	int type; // 0 for file,1 for directory
+	//int type; // 0 for file,1 for directory
 	mode_t mode;//The type and permissions of the file or directory
     uid_t uid;
 	gid_t gid;
@@ -62,31 +62,40 @@ static struct node {
 } ;
 
 struct node* nodes[MAX_NODES];//list of node
+
 int file_num=0;//numbers of files and directory
 
 const char * GetFileNamefromPath(const char *path){
 	fprintf(stderr, "GetFileNamefromPath is called\n");
 	char *filename_temp = strrchr(path, '/');
-	printf("filename: %s\n", filename_temp);
-	//char *filename=filename_temp+1;
+	//printf("filename: %s\n", filename_temp);
 	return strdup(filename_temp + 1);
-	//return filename;
 }
-struct node* CreateNode(const char *path,int type,struct Node *parent){
+const char* GetParentDir(const char* path) {
+	//If the parent directory is the root directory
+	if(path[0]=='/')
+		return "/";
+	
+    char *last_slash = strrchr(path, '/');
+
+    char *parent_path = (char *)malloc(last_slash - path + 1);
+    strncpy(parent_path, path, last_slash - path);
+    parent_path[last_slash - path] = '\0';
+    return parent_path;
+}
+
+
+struct node* CreateNode(const char *path,mode_t mode,struct Node *parent){
 	fprintf(stderr, "CreateNode is called\n");
 	struct node* new_node = (struct node *)malloc(sizeof(struct node));
 	if(strcmp(path,"/"))
 		new_node->filename=GetFileNamefromPath(path);
 	else
 		new_node->filename="";
-	new_node->path=path;
-	new_node->type=type;
+	new_node->path=strdup(path);
+	
+	new_node->mode=mode;
 
-	//Permissions temporarily set to normal files
-	if(type==0)
-		new_node->mode=S_IFREG | 00400;
-	if(type==1)
-		new_node->mode=S_IFDIR | 00400;
 	new_node->parent=parent;
 	new_node->child_count=0;
 	
@@ -100,6 +109,9 @@ struct node* CreateNode(const char *path,int type,struct Node *parent){
 	//
 	nodes[file_num]=new_node;
 	file_num++;
+
+	new_node->children = (struct node **)malloc(MAX_CHILDREN * sizeof(struct node *));
+
 	return new_node;
 }
 void PrintNode(struct node* node){
@@ -115,19 +127,24 @@ void PrintNode(struct node* node){
 	if (node->path!=NULL) printf("path: %s\n", node->path);
 	else printf("path: \n");
 	printf("child_count: %d\n", node->child_count);
-	if (node->type!=NULL) printf("type: %d\n", node->type);
-	else printf("type: \n");
 	if(node->mode!=NULL) printf("mode: %d\n", node->mode);
 	else printf("mode: \n");
+	if(node->child_count!=0){
+		for(int i=0;i<node->child_count;i++){
+			printf("children[%d]=%s ",i,node->children[i]->filename);
+		}
+	}
+	printf("\n");
 }
 
 struct node* FindNode(const char *path){
 	fprintf(stderr, "FindNode is called,tring to find %s\n",path);
-
+	printf("-----------file_num--------------=%d\n",file_num);
 	for(int i=0;i<file_num;i++){
+		printf("i=%d,nodes[%d]->path=%s\n",i,i,nodes[i]->path);
 		if(!strcmp(nodes[i]->path,path)){
 			printf("Lookup successed, %s was found.\n",nodes[i]->path);
-			PrintNode(nodes[i]);
+			//PrintNode(nodes[i]);
 			return nodes[i];
 		}
 	}
@@ -141,12 +158,12 @@ void FindChild(struct node* parent,char** child_names){
 		return ;
 	}
 
-	//int child_count=parent->child_count;
 	for(int i=0;i<parent->child_count;i++){
+		child_names[i] = (char *)malloc(sizeof(parent->children[i]->filename));
 		strcpy(child_names[i],parent->children[i]->filename);
 	}
-
 }
+
 
 
 #define OPTION(t, p)                           \
@@ -161,10 +178,16 @@ static const struct fuse_opt option_spec[] = {
 
 void* my_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
-    fprintf(stderr, "my_init is called"); 
+    fprintf(stderr, "my_init is called"); \
+	//*nodes=(struct node*)malloc(MAX_NODES*sizeof(struct node*));
+	/*for (int i = 0; i < MAX_NODES; i++) {
+    	nodes[i] = (struct node*)malloc(sizeof(struct node));
+	}*/
+	//*nodes = (struct node**)malloc(MAX_NODES * sizeof(struct node));
+
 	//create root node
 	
-	nodes[file_num]=CreateNode("/",1,NULL);
+	nodes[0]=CreateNode("/",S_IFDIR | 00400,NULL);
 	/*PrintNode(nodes[0]);
 	FindNode("/");*/
     return NULL;
@@ -178,11 +201,19 @@ int my_mknod(const char *path, mode_t m)
 	//options_list[0]=nod;
     return 0;
 }
+// Create a new file in memory
 int my_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
-    // Create a new file in memory
 	fprintf(stderr, "my_create path = %s\n", path); 
-	/*if(mode==)
-	CreateNode(path,)*/
+
+	const char* parent_path=GetParentDir(path);
+	printf("-------findparent------%s\n",parent_path);
+	struct node* parent=FindNode(parent_path);
+	struct node* new_node=CreateNode(path,mode,parent);
+	//Add child nodes to parent
+	parent->children[parent->child_count]=new_node;
+	parent->child_count++;
+	printf("check parent node\n");
+	PrintNode(parent);
     return 0;
 }
 
@@ -215,20 +246,17 @@ int my_truncate(const char *path, off_t length){
 static int my_getattr(const char *path, struct stat *stbuf,
 			 struct fuse_file_info *fi)
 {
-	fprintf(stderr, "my_getattr path = %s\n", path); 
-	//stbuf->st_mode = S_IFDIR | 00400;
-	//int res = 0;
+	//fprintf(stderr, "my_getattr path = %s\n", path); 
+
 	struct node* target_node=FindNode(path);
-	printf("********************");
-	PrintNode(target_node);
+	//PrintNode(target_node);
 	if(FindNode(path)==NULL){
 		printf("my_getattr failed,path=%s\n",path);
 		return -ENOENT;	
 	}
 	else{
-		stbuf->st_mode=target_node->mode;
-		//stbuf->st_mode = S_IFDIR | 00400;
-		
+		printf("my_getattr succeed,path=%s\n",path);
+		stbuf->st_mode=target_node->mode;		
 		return 0;
 	}
 	
@@ -282,12 +310,16 @@ static int my_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	struct node* parent=FindNode(path);
 	//char** child_names[MAX_CHILDREN];
 	char **child_names = (char **)malloc(MAX_CHILDREN * sizeof(char *));
+	printf("before findchild\n");
+	PrintNode(parent);
 	FindChild(parent,child_names);
-	int i=0;
-	/*while(child_names[i]!=NULL){
+	for(int i=0;i<parent->child_count;i++){
+		printf("child_names[%d]=%s\n",i,child_names[i]);
 		filler(buf, child_names[i], NULL, 0, 0);
-		i++;
-	}*/
+	}
+	for(int i=0;i<parent->child_count;i++){
+		free(child_names[i]);
+	}
 	free(child_names);
 	return 0;
 }
