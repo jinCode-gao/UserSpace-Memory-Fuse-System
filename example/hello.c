@@ -72,11 +72,12 @@ const char * GetFileNamefromPath(const char *path){
 	return strdup(filename_temp + 1);
 }
 const char* GetParentDir(const char* path) {
-	//If the parent directory is the root directory
-	if(path[0]=='/')
-		return "/";
-	
+
     char *last_slash = strrchr(path, '/');
+
+	//If the parent directory is the root directory
+	if(last_slash==path)
+		return "/";
 
     char *parent_path = (char *)malloc(last_slash - path + 1);
     strncpy(parent_path, path, last_slash - path);
@@ -110,7 +111,7 @@ struct node* CreateNode(const char *path,mode_t mode,struct Node *parent){
 	//
 	nodes[file_num]=new_node;
 	file_num++;
-	if (S_ISDIR(mode))
+	if ((mode & S_IFMT) == S_IFDIR)
 		new_node->children = (struct node **)malloc(MAX_CHILDREN * sizeof(struct node *));//file has no children
 	 else 
     	new_node->children = NULL;
@@ -190,7 +191,7 @@ void* my_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 
 	//create root node
 	
-	nodes[0]=CreateNode("/",S_IFDIR | 00400,NULL);
+	nodes[0]=CreateNode("/",S_IFDIR | 0775,NULL);
 	/*PrintNode(nodes[0]);
 	FindNode("/");*/
     return NULL;
@@ -208,15 +209,49 @@ int my_mknod(const char *path, mode_t m)
 int my_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 	fprintf(stderr, "my_create path = %s\n", path); 
 
+	//file existence check
+	/*if(FindNode(path)!=NULL){
+		printf("File %s already exists,failed to create.\n",path);
+		return -ENOENT;
+	}*/
+	//find parent
 	const char* parent_path=GetParentDir(path);
-	printf("-------findparent------%s\n",parent_path);
 	struct node* parent=FindNode(parent_path);
+
+	//create node
 	struct node* new_node=CreateNode(path,mode,parent);
+
+	printf("my_create: parent is %s.Print parent before add children.\n",parent->path);
+	PrintNode(parent);
 	//Add child nodes to parent
 	parent->children[parent->child_count]=new_node;
 	parent->child_count++;
-	printf("check parent node\n");
+	printf("my_create: parent is %s.Print parent after add children.\n",parent->path);
 	PrintNode(parent);
+    return 0;
+}
+static int my_mkdir(const char *path, mode_t mode){
+	mode=S_IFDIR | 0775;
+	fprintf(stderr, "my_mkdir path = %s\n", path); 
+	if((mode & S_IFMT) == S_IFDIR)
+		printf("S_ISDIR\n");
+	else
+		printf("mode=%d",mode);
+	
+	//find parent
+	const char* parent_path=GetParentDir(path);
+	struct node* parent=FindNode(parent_path);
+
+	//create node
+	struct node* new_node=CreateNode(path,mode,parent);
+
+	//Add child nodes to parent
+	parent->children[parent->child_count]=new_node;
+	parent->child_count++;
+
+	PrintNode(parent);
+	printf("check node\n");
+	PrintNode(new_node);
     return 0;
 }
 
@@ -379,7 +414,7 @@ int my_unlink(const char * path){
 			break;
 		}
 	}
-	
+
 	//
 	return 0;
 }
@@ -389,6 +424,7 @@ static const struct fuse_operations hello_oper = {
 	.init=my_init,
 	.mknod=my_mknod,
 	.create=my_create,
+	.mkdir=my_mkdir,
 	.open=my_open,
 	.write=my_write,
 	.release=my_release,
