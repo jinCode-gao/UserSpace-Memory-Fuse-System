@@ -258,21 +258,33 @@ static int my_mkdir(const char *path, mode_t mode){
 int my_open(const char *path, struct fuse_file_info *fi)
 {
 	fprintf(stderr, "my_open path = %s\n", path); 
-	syslog(LOG_INFO, "my_open is called, path is %s", path);
-	if(!strcmp(path,"/filename")){
-		return 0;
+	struct node* target_node = FindNode(path);
+	if (target_node == NULL) {
+		printf("my_open:%s does not exist.\n",path);
+		return -ENOENT;
 	}
-	if(!strcmp(path,"/new_file")){
-		return 0;
-	}
-    return -ENOENT;
+	fi->fh = (uint64_t) target_node;
+	printf("my_open:%s succeed.\n",path);
+	return 0;
 }
+
 
 int my_write(const char *path, const char * buf, size_t len, off_t offset,struct fuse_file_info *fi)
 {
 	fprintf(stderr, "my_write path = %s\n", path); 
-	options_list[0].contents="Hello World";
-    return 0;
+	struct node* target_node = (struct node*)fi->fh;
+    int new_size = offset + len;//Byte
+    if (target_node->contents) {
+        if (new_size > strlen(target_node->contents)) {//only English
+            target_node->contents = realloc(target_node->contents, new_size);
+        }
+    } else {
+        target_node->contents = malloc(new_size);
+    }
+	printf("offset=%ld\n",offset);
+    memcpy(target_node->contents + offset, buf, len);
+	PrintNode(target_node);
+    return len;
 }
 
 
@@ -297,30 +309,6 @@ static int my_getattr(const char *path, struct stat *stbuf,
 		stbuf->st_mode=target_node->mode;		
 		return 0;
 	}
-	
-	//struct node* target_node=FindNode(path);
-	//return 0;
-	//PrintNode(target_node);
-	/*if(target_node){
-		if(target_node->type==0){
-			//stbuf->st_mode = target_node->mode;
-		}
-		else if(target_node->type==1){
-			//printf("target_node->mode: %d\n", target_node->mode);
-			//stbuf->st_mode = target_node->mode;
-			//stbuf->st_mode = S_IFDIR | 00400;
-			//stbuf->st_size=strlen(target_node->contents);
-		}
-		stbuf->st_atime = target_node->atime;
-		stbuf->st_mtime = target_node->mtime;
-		stbuf->st_ctime = target_node->ctime;
-		return 0;
-
-	}
-	else{
-		printf("my_getattr failed,path=%s\n",path);
-		return -ENOENT;
-	}*/
 		
 }
 
