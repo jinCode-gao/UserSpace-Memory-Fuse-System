@@ -306,6 +306,11 @@ static int my_getattr(const char *path, struct stat *stbuf,
 	}
 	else{
 		printf("my_getattr succeed,path=%s\n",path);
+		/* 注意，如不清楚具体长度，这个长度需写长一点，否则无法输出 */
+		if(target_node->contents!=NULL)
+			stbuf->st_size = strlen(target_node->contents);
+		else	
+			stbuf->st_size = 0;
 		stbuf->st_mode=target_node->mode;		
 		return 0;
 	}
@@ -315,12 +320,25 @@ static int my_getattr(const char *path, struct stat *stbuf,
 static int my_read(const char *path, char *buf, size_t size, off_t offset,
 		      struct fuse_file_info *fi)
 {
-	fprintf(stderr, "my_read path = %s\n", path); 
-	if(!strcmp(path,"/filename")){
-		strcpy(buf,"Hello World\n");
-		return strlen("Hello World\n");
+	fprintf(stderr, "my_read path = %s\n", path);
+	struct node* target_node = (struct node*)fi->fh;
+
+	if (target_node->contents==NULL) {
+		return 0;
 	}
-	return -ENOENT;
+	size_t contents_size = strlen(target_node->contents);
+	if (offset < contents_size) {
+		if (offset + size > contents_size) {
+			size = contents_size - offset;
+		}
+		const char* contents=strdup(target_node->contents + offset);
+
+		memcpy(buf, target_node->contents + offset, size);
+	} 
+	else {
+		size = 0;
+	}
+	return size;
 }
 
 static int my_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
