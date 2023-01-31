@@ -103,10 +103,24 @@ struct node* CreateNode(const char *path,mode_t mode,struct Node *parent){
 	
 	//set time
 	time_t now = time(NULL);
-	struct tm *timeinfo = gmtime(&now);
-	new_node->atime = timeinfo->tm_sec;
+	struct tm *timeinfo = localtime(&now);
+
+	fprintf(stderr,"see time:%d-%d-%d %d:%d:%d\n",
+        timeinfo->tm_year + 1900,
+        timeinfo->tm_mon + 1,
+        timeinfo->tm_mday,
+        timeinfo->tm_hour,
+        timeinfo->tm_min,
+        timeinfo->tm_sec);
+
+	/*new_node->atime = timeinfo->tm_sec;
 	new_node->mtime = timeinfo->tm_sec;
-	new_node->ctime = timeinfo->tm_sec;
+	new_node->ctime = timeinfo->tm_sec;*/
+	fprintf(stderr,"mktime result: %ld\n", mktime(timeinfo));
+	new_node->atime = mktime(timeinfo);
+	new_node->mtime = mktime(timeinfo);
+	new_node->ctime = mktime(timeinfo);
+
 
 	//
 	nodes[file_num]=new_node;
@@ -410,6 +424,10 @@ static int my_getattr(const char *path, struct stat *stbuf,
 		else	
 			stbuf->st_size = 0;
 		stbuf->st_mode=target_node->mode;		
+
+		stbuf->st_atime = target_node->atime;
+		stbuf->st_mtime = target_node->mtime;
+		stbuf->st_ctime = target_node->ctime;
 		return 0;
 	}
 		
