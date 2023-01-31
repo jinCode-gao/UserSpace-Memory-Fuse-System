@@ -46,9 +46,9 @@ static struct options {
 } options,options_list[5];
 
 static struct node {
-	const char *filename;//file or directory name
-	const char *contents;//file contents
-	const char *path;
+	char *filename;//file or directory name
+	char *contents;//file contents
+	char *path;
 	//int type; // 0 for file,1 for directory
 	mode_t mode;//The type and permissions of the file or directory
     uid_t uid;
@@ -168,6 +168,99 @@ void FindChild(struct node* parent,char** child_names){
 	}
 }
 
+void SerializeNode(struct node *node, FILE *fp) {
+	fprintf(stderr, "SerializeNode is called"); 
+
+	int filename_len= strlen(node->filename);
+	fwrite(&filename_len, sizeof(int), 1, fp);
+    fwrite(node->filename, sizeof(char), strlen(node->filename)+1, fp);
+	printf("ccc\n");
+
+	if(node->contents==NULL){
+		int contents_len = 0;
+		fwrite(&contents_len, sizeof(int), 1, fp);
+	}
+	else{
+		int contents_len = strlen(node->contents);
+		printf("aaa\n");
+		fwrite(&contents_len, sizeof(int), 1, fp);
+		printf("bbb\n");
+		fwrite(node->contents, sizeof(char), strlen(node->contents)+1, fp);
+	}
+    
+	int path_len= strlen(node->path);
+	fwrite(&path_len, sizeof(int), 1, fp);
+    fwrite(node->path, sizeof(char), strlen(node->path)+1, fp);
+    /*fwrite(&node->mode, sizeof(mode_t), 1, fp);
+    fwrite(&node->uid, sizeof(uid_t), 1, fp);
+    fwrite(&node->gid, sizeof(gid_t), 1, fp);
+    fwrite(&node->child_count, sizeof(int), 1, fp);
+    fwrite(&node->atime, sizeof(time_t), 1, fp);
+    fwrite(&node->mtime, sizeof(time_t), 1, fp);
+    fwrite(&node->ctime, sizeof(time_t), 1, fp);*/
+
+    for (int i = 0; i < node->child_count; i++) {
+        SerializeNode(node->children[i], fp);
+    }
+}
+
+void SerializeTree(struct node *root) {
+	fprintf(stderr, "SerializeTree is called"); 
+	FILE* fp;
+	char* filename = "/home/matrix/project/libfuse/MyFuseSys/serialized_file.txt";
+	fp = fopen(filename, "w");
+	if (fp == NULL) {
+		printf("Error opening file!\n");
+		return 1;
+	}
+
+
+    SerializeNode(root, fp);
+    fclose(fp);
+}
+
+struct node *DeserializeNode(FILE *fp) {
+	fprintf(stderr, "DeserializeNode is called"); 
+    struct node *node = (struct node*)malloc(sizeof(struct node));
+    int filename_len, contents_len, path_len;
+
+    fread(&filename_len, sizeof(int), 1, fp);
+    node->filename = (const char*)malloc(filename_len + 1);
+    fread(node->filename, sizeof(char), filename_len, fp);
+    node->filename[filename_len] = '\0';
+
+    fread(&contents_len, sizeof(int), 1, fp);
+	if(contents_len==0){
+		node->contents=NULL;
+	}
+	else{
+		node->contents = (const char*)malloc(contents_len + 1);
+		fread(node->contents, sizeof(char), contents_len, fp);
+		node->contents[contents_len] = '\0';
+	}
+
+    read(&path_len, sizeof(int), 1, fp);
+    node->path = (const char*)malloc(path_len + 1);
+    fread(node->path, sizeof(char), path_len, fp);//
+    node->path[path_len] = '\0';
+
+    /*fread(&node->mode, sizeof(mode_t), 1, fp);
+    fread(&node->uid, sizeof(uid_t), 1, fp);
+    fread(&node->gid, sizeof(gid_t), 1, fp);
+
+    fread(&node->atime, sizeof(time_t), 1, fp);
+    fread(&node->mtime, sizeof(time_t), 1, fp);
+    fread(&node->ctime, sizeof(time_t), 1, fp);*/
+
+    /*fread(&node->child_count, sizeof(int), 1, fp);
+    node->children = (struct node**)malloc(node->child_count * sizeof(struct node*));
+    for (int i = 0; i < node->child_count; i++) {
+        node->children[i] = DeserializeNode(fp);
+        node->children[i]->parent = node;
+    }*/
+
+    return node;
+}
 
 
 #define OPTION(t, p)                           \
@@ -182,18 +275,22 @@ static const struct fuse_opt option_spec[] = {
 
 void* my_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
-    fprintf(stderr, "my_init is called"); \
-	//*nodes=(struct node*)malloc(MAX_NODES*sizeof(struct node*));
-	/*for (int i = 0; i < MAX_NODES; i++) {
-    	nodes[i] = (struct node*)malloc(sizeof(struct node));
-	}*/
-	//*nodes = (struct node**)malloc(MAX_NODES * sizeof(struct node));
+    fprintf(stderr, "my_init is called"); 
 
-	//create root node
-	
-	nodes[0]=CreateNode("/",S_IFDIR | 0775,NULL);
-	/*PrintNode(nodes[0]);
-	FindNode("/");*/
+	//file not found
+    if (access("/home/matrix/project/libfuse/MyFuseSys/serialized_file.txt", F_OK)==-1) {
+        fprintf(stderr, "Serialization file not found, initialized to empty.\n");
+		//create root node
+		nodes[0]=CreateNode("/",S_IFDIR | 0775,NULL);
+        return;
+    }
+
+	else{
+		FILE *fp = fopen("/home/matrix/project/libfuse/MyFuseSys/serialized_file.txt", "wb");
+		printf("The serialized file was found, and the file system has been restored to memory according to the serialized file.\n");
+		DeserializeNode(fp);
+	}
+
     return NULL;
 }
 
@@ -476,6 +573,32 @@ int my_rmdir(const char * path){
 	return 0;
 }
 
+void my_destroy(void *private_data) {
+	// 此处是你的退出操作
+	fprintf(stderr, "my_fuse_exit is called\n");
+	// 你可以在这里进行序列化
+	/*FILE* fp;
+	char* filename = "/home/matrix/project/libfuse/MyFuseSys/serialized_file.txt";
+	fp = fopen(filename, "w");
+	if (fp == NULL) {
+		printf("Error opening file!\n");
+		return 1;
+	}*/
+	
+	SerializeTree(FindNode("/"));
+	fprintf(stderr, "Serialization has been completed, and the serialized file is saved in serialized_file.txt in the root directory of the project.\n");
+}
+int my_rename(const char *old_path, const char *new_path) {
+    int ret = 0;
+
+    // Perform file system specific operations to rename a file.
+	struct node* target=FindNode(old_path);
+	free(target->filename);
+    free(target->path);
+	target->filename=GetFileNamefromPath(new_path);
+	target->path=strdup(new_path);
+    return ret;
+}
 
 static const struct fuse_operations hello_oper = {
 	.init=my_init,
@@ -493,6 +616,8 @@ static const struct fuse_operations hello_oper = {
 	.read=my_read,
 	.unlink=my_unlink,
 	.rmdir=my_rmdir,
+	//.destroy=my_destroy,
+	.rename=my_rename,
 };
 
 static void show_help(const char *progname)
@@ -512,6 +637,7 @@ int main(int argc, char *argv[])
 	fflush(stdout);
 
 	int ret;
+	char user_input[256];
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
 	if (fuse_opt_parse(&args, &options, option_spec, NULL) == -1)
@@ -522,6 +648,25 @@ int main(int argc, char *argv[])
 		assert(fuse_opt_add_arg(&args, "--help") == 0);
 		args.argv[0][0] = '\0';
 	}
+
+	// 读取用户输入的字符串
+    /*while (1) {
+        printf("Enter a command: ");
+        fflush(stdout);
+        scanf("%s", user_input);
+        if (strcmp(user_input, "serialize") == 0) {
+            // 如果用户输入的字符串为 "serialize"，执行序列化函数
+			printf("serialize\n ");
+            //Serialize();
+        } else if (strcmp(user_input, "quit") == 0) {
+            // 如果用户输入的字符串为 "quit"，退出程序
+			printf("quit\n ");
+            break;
+        } else {
+            printf("Unknown command\n");
+            fflush(stdout);
+        }
+    }*/
 
 	ret = fuse_main(args.argc, args.argv, &hello_oper, NULL);
 	fuse_opt_free_args(&args);

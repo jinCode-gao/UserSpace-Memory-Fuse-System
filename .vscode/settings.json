@@ -17,6 +17,7 @@
         "fuse.h": "c",
         "bitset": "c",
         "initializer_list": "c",
-        "utility": "c"
+        "utility": "c",
+        "memory_resource": "c"
     }
 }
