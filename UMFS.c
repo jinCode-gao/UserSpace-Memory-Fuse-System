@@ -320,11 +320,6 @@ int my_mknod(const char *path, mode_t m)
 int my_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 	fprintf(stderr, "my_create path = %s\n", path); 
 
-	//file existence check
-	/*if(FindNode(path)!=NULL){
-		printf("File %s already exists,failed to create.\n",path);
-		return -ENOENT;
-	}*/
 	//find parent
 	const char* parent_path=GetParentDir(path);
 	struct node* parent=FindNode(parent_path);
@@ -340,7 +335,6 @@ int my_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 	printf("my_create: parent is %s.Print parent after add children.\n",parent->path);
 	PrintNode(parent);
     return 0;
-	//return  -ENOSYS;
 }
 static int my_mkdir(const char *path, mode_t mode){
 	mode=S_IFDIR | 0775;
@@ -399,7 +393,6 @@ int my_write(const char *path, const char * buf, size_t len, off_t offset,struct
     return len;
 }
 
-
 int my_truncate(const char *path, off_t length){
 	fprintf(stderr, "my_truncate path = %s\n", path); 
 	return 0;
@@ -418,7 +411,7 @@ static int my_getattr(const char *path, struct stat *stbuf,
 	}
 	else{
 		printf("my_getattr succeed,path=%s\n",path);
-		/* 注意，如不清楚具体长度，这个长度需写长一点，否则无法输出 */
+		
 		if(target_node->contents!=NULL)
 			stbuf->st_size = strlen(target_node->contents);
 		else	
@@ -618,7 +611,7 @@ int my_rename(const char *old_path, const char *new_path) {
     return ret;
 }
 
-static const struct fuse_operations hello_oper = {
+static const struct fuse_operations UMFS_oper = {
 	.init=my_init,
 	.mknod=my_mknod,
 	.create=my_create,
@@ -626,7 +619,6 @@ static const struct fuse_operations hello_oper = {
 	.open=my_open,
 	.write=my_write,
 	.release=my_release,
-	//.truncate=my_truncate,
 	.getattr	= my_getattr,
 	.setxattr=my_setattr,
 	.utimens=my_utimens,
@@ -686,7 +678,7 @@ int main(int argc, char *argv[])
         }
     }*/
 
-	ret = fuse_main(args.argc, args.argv, &hello_oper, NULL);
+	ret = fuse_main(args.argc, args.argv, &UMFS_oper, NULL);
 	fuse_opt_free_args(&args);
 	return ret;
 }
