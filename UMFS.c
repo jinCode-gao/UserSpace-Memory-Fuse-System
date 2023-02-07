@@ -1,27 +1,12 @@
 /*
-  FUSE: Filesystem in Userspace
-  Copyright (C) 2001-2007  Miklos Szeredi <miklos@szeredi.hu>
-
-  This program can be distributed under the terms of the GNU GPLv2.
-  See the file COPYING.
+UserSpace-Memory-Fuse-System, developed using libfuse.
 */
 
-/** @file
- *
- * minimal example filesystem using high-level API
- *
- * Compile with:
- *
- *     gcc -Wall hello.c `pkg-config fuse3 --cflags --libs` -o hello
- *
- * ## Source code ##
- * \include hello.c
- */
 
 
 #define FUSE_USE_VERSION 31
-#define MAX_NODES 10
-#define MAX_CHILDREN 5
+#define MAX_NODES 100
+#define MAX_CHILDREN 50
 
 #include <fuse.h>
 #include <stdio.h>
@@ -32,19 +17,8 @@
 #include <assert.h>
 #include <syslog.h>
 
-/*
- * Command line options
- *
- * We can't set default values for the char* fields here because
- * fuse_opt_parse would attempt to free() them when the user specifies
- * different values on the command line.
- */
-static struct options {
-	const char *filename;
-	const char *contents;
-	int show_help;
-} options,options_list[5];
 
+//file or dir
 static struct node {
 	char *filename;//file or directory name
 	char *contents;//file contents
@@ -65,12 +39,15 @@ struct node* nodes[MAX_NODES];//list of node
 
 int file_num=0;//numbers of files and directory
 
+//get filename from path
 const char * GetFileNamefromPath(const char *path){
 	fprintf(stderr, "GetFileNamefromPath is called\n");
 	char *filename_temp = strrchr(path, '/');
 	//printf("filename: %s\n", filename_temp);
 	return strdup(filename_temp + 1);
 }
+
+//Get the path of the parent node
 const char* GetParentDir(const char* path) {
 
     char *last_slash = strrchr(path, '/');
@@ -85,7 +62,7 @@ const char* GetParentDir(const char* path) {
     return parent_path;
 }
 
-
+//Create a node.
 struct node* CreateNode(const char *path,mode_t mode,struct Node *parent){
 	fprintf(stderr, "CreateNode is called\n");
 	struct node* new_node = (struct node *)malloc(sizeof(struct node));
@@ -113,16 +90,13 @@ struct node* CreateNode(const char *path,mode_t mode,struct Node *parent){
         timeinfo->tm_min,
         timeinfo->tm_sec);
 
-	/*new_node->atime = timeinfo->tm_sec;
-	new_node->mtime = timeinfo->tm_sec;
-	new_node->ctime = timeinfo->tm_sec;*/
+
 	fprintf(stderr,"mktime result: %ld\n", mktime(timeinfo));
 	new_node->atime = mktime(timeinfo);
 	new_node->mtime = mktime(timeinfo);
 	new_node->ctime = mktime(timeinfo);
 
 
-	//
 	nodes[file_num]=new_node;
 	file_num++;
 	if ((mode & S_IFMT) == S_IFDIR)
@@ -132,6 +106,8 @@ struct node* CreateNode(const char *path,mode_t mode,struct Node *parent){
 
 	return new_node;
 }
+
+//Print information of a node for debugging
 void PrintNode(struct node* node){
 	if (node == NULL) {
         printf("Error: node is NULL\n");
@@ -155,6 +131,7 @@ void PrintNode(struct node* node){
 	printf("\n");
 }
 
+//Find nodes from nodes
 struct node* FindNode(const char *path){
 	fprintf(stderr, "FindNode is called,tring to find %s\n",path);
 	printf("-----------file_num--------------=%d\n",file_num);
@@ -169,6 +146,8 @@ struct node* FindNode(const char *path){
 	printf("Lookup failed, %s does not exist in the file system.\n",path);
 	return NULL;
 }
+
+//Find the names of all child nodes of parent
 void FindChild(struct node* parent,char** child_names){
 	fprintf(stderr, "FindChild is called\n");
 	if(parent->child_count==0){
@@ -182,6 +161,7 @@ void FindChild(struct node* parent,char** child_names){
 	}
 }
 
+//Persist to local, not completed
 void SerializeNode(struct node *node, FILE *fp) {
 	fprintf(stderr, "SerializeNode is called"); 
 
@@ -218,6 +198,7 @@ void SerializeNode(struct node *node, FILE *fp) {
     }
 }
 
+//Persist to local, not completed
 void SerializeTree(struct node *root) {
 	fprintf(stderr, "SerializeTree is called"); 
 	FILE* fp;
@@ -227,12 +208,11 @@ void SerializeTree(struct node *root) {
 		printf("Error opening file!\n");
 		return 1;
 	}
-
-
     SerializeNode(root, fp);
     fclose(fp);
 }
 
+//Deserialize from local, incomplete
 struct node *DeserializeNode(FILE *fp) {
 	fprintf(stderr, "DeserializeNode is called"); 
     struct node *node = (struct node*)malloc(sizeof(struct node));
@@ -276,17 +256,7 @@ struct node *DeserializeNode(FILE *fp) {
     return node;
 }
 
-
-#define OPTION(t, p)                           \
-    { t, offsetof(struct options, p), 1 }
-static const struct fuse_opt option_spec[] = {
-	OPTION("--name=%s", filename),
-	OPTION("--contents=%s", contents),
-	OPTION("-h", show_help),
-	OPTION("--help", show_help),
-	FUSE_OPT_END
-};
-
+//init
 void* my_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
     fprintf(stderr, "my_init is called"); 
@@ -308,14 +278,16 @@ void* my_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
     return NULL;
 }
 
+//temporarily useless
 int my_mknod(const char *path, mode_t m)
 {
 	fprintf(stderr, "my_mknod path = %s\n", path); 
-    struct options nod;
-	nod.filename=strdup("new_file");
+    //struct options nod;
+	//nod.filename=strdup("new_file");
 	//options_list[0]=nod;
     return 0;
 }
+
 // Create a new file in memory
 int my_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 	fprintf(stderr, "my_create path = %s\n", path); 
@@ -336,6 +308,8 @@ int my_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 	PrintNode(parent);
     return 0;
 }
+
+// Create a new dir in memory
 static int my_mkdir(const char *path, mode_t mode){
 	mode=S_IFDIR | 0775;
 	fprintf(stderr, "my_mkdir path = %s\n", path); 
@@ -361,6 +335,7 @@ static int my_mkdir(const char *path, mode_t mode){
     return 0;
 }
 
+//open file
 int my_open(const char *path, struct fuse_file_info *fi)
 {
 	fprintf(stderr, "my_open path = %s\n", path); 
@@ -374,10 +349,12 @@ int my_open(const char *path, struct fuse_file_info *fi)
 	return 0;
 }
 
-
+//write
 int my_write(const char *path, const char * buf, size_t len, off_t offset,struct fuse_file_info *fi)
 {
-	fprintf(stderr, "my_write path = %s\n", path); 
+	struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+	//fprintf(stderr, "my_write path = %s\n", path); 
 	struct node* target_node = (struct node*)fi->fh;
     int new_size = offset + len;//Byte
     if (target_node->contents) {
@@ -387,9 +364,13 @@ int my_write(const char *path, const char * buf, size_t len, off_t offset,struct
     } else {
         target_node->contents = malloc(new_size);
     }
-	printf("offset=%ld\n",offset);
+	//printf("offset=%ld\n",offset);
     memcpy(target_node->contents + offset, buf, len);
-	PrintNode(target_node);
+	//PrintNode(target_node);
+	clock_gettime(CLOCK_MONOTONIC, &end);
+
+	//calculating time
+	printf("time elapsed: %ld ns\n", (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec));
     return len;
 }
 
@@ -398,6 +379,7 @@ int my_truncate(const char *path, off_t length){
 	return 0;
 }
 
+//Get file properties
 static int my_getattr(const char *path, struct stat *stbuf,
 			 struct fuse_file_info *fi)
 {
@@ -426,10 +408,13 @@ static int my_getattr(const char *path, struct stat *stbuf,
 		
 }
 
+//read file content
 static int my_read(const char *path, char *buf, size_t size, off_t offset,
 		      struct fuse_file_info *fi)
 {
-	fprintf(stderr, "my_read path = %s\n", path);
+	struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+	//fprintf(stderr, "my_read path = %s\n", path);
 	struct node* target_node = (struct node*)fi->fh;
 
 	if (target_node->contents==NULL) {
@@ -447,9 +432,12 @@ static int my_read(const char *path, char *buf, size_t size, off_t offset,
 	else {
 		size = 0;
 	}
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	printf("read time elapsed: %ld ns\n", (end.tv_sec - start.tv_sec) * 1000000000 + (end.tv_nsec - start.tv_nsec));
 	return size;
 }
 
+//read files in directory
 static int my_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 			 off_t offset, struct fuse_file_info *fi,
 			 enum fuse_readdir_flags flags)
@@ -476,13 +464,14 @@ static int my_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	free(child_names);
 	return 0;
 }
-/*
-my_utimens函数来更新文件的时间戳
-*/
+
+//temporarily useless
 int my_utimens(const char *path, const struct timespec tv[2], struct fuse_file_info *fi) {
 	fprintf(stderr, "my_utimens path = %s\n", path); 
 	return 0;
 }
+
+//temporarily useless
 int my_setattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
 {
 	fprintf(stderr, "my_setattr path = %s\n", path); 
@@ -490,10 +479,14 @@ int my_setattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
 
     return res;
 }
+
+//temporarily useless
 int my_release(const char *path, struct fuse_file_info *fi) {
 	fprintf(stderr, "my_release path = %s\n", path); 
     return 0;
 }
+
+//delete file
 int my_unlink(const char * path){
 	//Find the node to be deleted
 	struct node* node_to_delete = FindNode(path);
@@ -532,6 +525,8 @@ int my_unlink(const char * path){
 
 	return 0;
 }
+
+//delete dir
 int my_rmdir(const char * path){
 	//Find the node to be deleted
 	struct node* node_to_delete = FindNode(path);
@@ -584,10 +579,11 @@ int my_rmdir(const char * path){
 	return 0;
 }
 
+//Execute when destroyed, call the persistence operation at this time
 void my_destroy(void *private_data) {
-	// 此处是你的退出操作
+	// 
 	fprintf(stderr, "my_fuse_exit is called\n");
-	// 你可以在这里进行序列化
+	// 
 	/*FILE* fp;
 	char* filename = "/home/matrix/project/libfuse/MyFuseSys/serialized_file.txt";
 	fp = fopen(filename, "w");
@@ -599,6 +595,8 @@ void my_destroy(void *private_data) {
 	SerializeTree(FindNode("/"));
 	fprintf(stderr, "Serialization has been completed, and the serialized file is saved in serialized_file.txt in the root directory of the project.\n");
 }
+
+//rename file or dir
 int my_rename(const char *old_path, const char *new_path) {
     int ret = 0;
 
@@ -611,6 +609,7 @@ int my_rename(const char *old_path, const char *new_path) {
     return ret;
 }
 
+//Register an implemented function
 static const struct fuse_operations UMFS_oper = {
 	.init=my_init,
 	.mknod=my_mknod,
@@ -630,55 +629,13 @@ static const struct fuse_operations UMFS_oper = {
 	.rename=my_rename,
 };
 
-static void show_help(const char *progname)
-{
-	printf("usage: %s [options] <mountpoint>\n\n", progname);
-	printf("File-system specific options:\n"
-	       "    --name=<s>          Name of the \"hello\" file\n"
-	       "                        (default: \"hello\")\n"
-	       "    --contents=<s>      Contents \"hello\" file\n"
-	       "                        (default \"Hello, World!\\n\")\n"
-	       "\n");
-}
-
 int main(int argc, char *argv[])
 {
-	printf("main\n");
-	fflush(stdout);
-
 	int ret;
-	char user_input[256];
+	//char user_input[256];
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
-	if (fuse_opt_parse(&args, &options, option_spec, NULL) == -1)
-		return 1;
-
-	if (options.show_help) {
-		show_help(argv[0]);
-		assert(fuse_opt_add_arg(&args, "--help") == 0);
-		args.argv[0][0] = '\0';
-	}
-
-	// 读取用户输入的字符串
-    /*while (1) {
-        printf("Enter a command: ");
-        fflush(stdout);
-        scanf("%s", user_input);
-        if (strcmp(user_input, "serialize") == 0) {
-            // 如果用户输入的字符串为 "serialize"，执行序列化函数
-			printf("serialize\n ");
-            //Serialize();
-        } else if (strcmp(user_input, "quit") == 0) {
-            // 如果用户输入的字符串为 "quit"，退出程序
-			printf("quit\n ");
-            break;
-        } else {
-            printf("Unknown command\n");
-            fflush(stdout);
-        }
-    }*/
-
-	ret = fuse_main(args.argc, args.argv, &UMFS_oper, NULL);
+	ret = fuse_main(args.argc, args.argv, &UMFS_oper, NULL);//Entrance to the FUSE library
 	fuse_opt_free_args(&args);
 	return ret;
 }
